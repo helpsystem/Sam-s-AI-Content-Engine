@@ -1,0 +1,46 @@
+{
+  "collections": [
+    {
+      "name": "users",
+      "description": "User profiles and settings.",
+      "security_rules": [
+        {
+          "type": "read",
+          "condition": "request.auth != null"
+        },
+        {
+          "type": "write",
+          "condition": "request.auth != null"
+        }
+      ]
+    },
+    {
+      "name": "social_accounts",
+      "description": "Stores connected social media accounts (Meta, TikTok) for the user.",
+      "security_rules": [
+        {
+          "type": "read",
+          "condition": "request.auth != null"
+        },
+        {
+          "type": "write",
+          "condition": "request.auth != null"
+        }
+      ]
+    },
+    {
+      "name": "posts",
+      "description": "Stores scheduled and drafted posts for social media.",
+      "security_rules": [
+        {
+          "type": "read",
+          "condition": "request.auth != null"
+        },
+        {
+          "type": "write",
+          "condition": "request.auth != null"
+        }
+      ]
+    }
+  ]
+}

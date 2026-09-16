@@ -1,0 +1,151 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  INSTRUCTOR
+  MARKETING_MANAGER
+}
+
+enum AccessLevel {
+  ADMIN
+  CREATOR
+  VIEWER
+}
+
+enum Provider {
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  name          String?
+  role          Role         @default(INSTRUCTOR)
+  accessLevel   AccessLevel  @default(VIEWER)
+  workspaceId   String
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id])
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Workspace {
+  id             String          @id @default(cuid())
+  name           String
+  users          User[]
+  socialAccounts SocialAccount[]
+  posts          Post[]
+  campaigns      Campaign[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model SocialAccount {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id])
+  provider       Provider
+  providerId     String
+  accountName    String
+  accessToken    String
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  metadata       Json?     // Stores Instagram Business ID, Facebook Page ID, TikTok Creator Info
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Post {
+  id              String            @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id])
+  campaignId      String?
+  campaign        Campaign?         @relation(fields: [campaignId], references: [id])
+  title           String
+  contentEn       String?
+  contentEs       String?
+  status          PostStatus        @default(DRAFT)
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  errorDetails    Json?
+  targetPlatforms Provider[]
+  platformMeta    PostPlatformMeta?
+  mediaAssets     MediaAsset[]
+  metrics         AnalyticsMetric[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model PostPlatformMeta {
+  id        String @id @default(cuid())
+  postId    String @unique
+  post      Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  // TikTok specifics
+  tiktokPrivacyLevel   String?
+  tiktokBrandOrganic   Boolean @default(false)
+  tiktokIsAIGC         Boolean @default(false)
+  // Instagram specifics
+  igMediaType          String?
+  igShareToFeed        Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MediaAsset {
+  id         String   @id @default(cuid())
+  postId     String
+  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  url        String
+  dimensions String?
+  duration   Float?
+  mimeType   String
+  storagePath String
+  captionsVtt String?
+  createdAt  DateTime @default(now())
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  description String?
+  posts       Post[]
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AnalyticsMetric {
+  id          String   @id @default(cuid())
+  postId      String
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform    Provider
+  impressions Int      @default(0)
+  reach       Int      @default(0)
+  likes       Int      @default(0)
+  comments    Int      @default(0)
+  shares      Int      @default(0)
+  clicks      Int      @default(0)
+  recordedAt  DateTime @default(now())
+}

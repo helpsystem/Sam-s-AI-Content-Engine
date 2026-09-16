@@ -1,0 +1,6 @@
+{
+  "name": "Sam's Driving School Content Engine",
+  "description": "AI-powered core content engine for multi-platform social media campaigns.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
