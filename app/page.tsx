@@ -22,13 +22,14 @@ import { ContentCalendar } from "./components/ContentCalendar";
 import { Dashboard } from "./components/Dashboard";
 import { Integrations } from "./components/Integrations";
 import { MediaLibrary } from "./components/MediaLibrary";
-import { useAuth } from "../lib/AuthContext";
+import { AuthProvider, useAuth } from "../lib/AuthContext";
+
+export const dynamic = "force-dynamic";
 
 type ViewState = "dashboard" | "calendar" | "composer" | "ai-studio" | "media" | "integrations";
 
-
-export default function AppDashboard() {
-  const { user, signOut } = useAuth();
+function MainDashboard() {
+  const { user, signOut, isAdmin } = useAuth();
   const [activeView, setActiveView] = useState<ViewState>("ai-studio");
   const [language, setLanguage] = useState<"en" | "es">("en");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -120,14 +121,31 @@ export default function AppDashboard() {
               <Languages className="w-4 h-4" />
               {t[language].switchLang}
             </button>
-            <div className="flex items-center gap-2 pl-4 border-l border-neutral-200">
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt={user.displayName || "User"} className="w-8 h-8 rounded-full border border-neutral-200" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
-                  {user?.displayName ? user.displayName.charAt(0).toUpperCase() : "S"}
+            <div className="flex items-center gap-3 pl-4 border-l border-neutral-200">
+              <div className="flex items-center gap-2">
+                {user?.photoURL ? (
+                  <img src={user.photoURL} alt={user.displayName || "User"} className="w-8 h-8 rounded-full border border-neutral-200" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                    {user?.displayName ? user.displayName.charAt(0).toUpperCase() : "S"}
+                  </div>
+                )}
+                <div className="hidden sm:flex flex-col text-left">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-neutral-800 leading-none">
+                      {user?.displayName || "User"}
+                    </span>
+                    {isAdmin && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded leading-none">
+                        Admin
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-neutral-400 truncate max-w-[170px] leading-tight mt-0.5">
+                    {user?.email}
+                  </span>
                 </div>
-              )}
+              </div>
               <button onClick={signOut} className="p-1.5 text-neutral-400 hover:text-red-500 transition-colors" title="Sign out">
                 <LogOut className="w-4 h-4" />
               </button>
@@ -164,6 +182,14 @@ export default function AppDashboard() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function AppDashboard() {
+  return (
+    <AuthProvider>
+      <MainDashboard />
+    </AuthProvider>
   );
 }
 

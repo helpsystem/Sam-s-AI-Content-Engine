@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+"use client";
+
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { 
   BarChart, 
   Bar, 
@@ -14,12 +16,15 @@ import { db } from "../../lib/firebase";
 import { useAuth } from "../../lib/AuthContext";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 
+const emptySubscribe = () => () => {};
+
 interface DashboardProps {
   language: "en" | "es";
 }
 
 export function Dashboard({ language }: DashboardProps) {
   const { user } = useAuth();
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
   
   const [scheduledCount, setScheduledCount] = useState(0);
   const [publishedCount, setPublishedCount] = useState(0);
@@ -141,22 +146,28 @@ export function Dashboard({ language }: DashboardProps) {
         <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-sm">
           <h3 className="text-lg font-semibold text-neutral-800 mb-6">{t[language].charts.platformTitle}</h3>
           <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={platformData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} barSize={48}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  cursor={{ fill: '#f3f4f6' }}
-                />
-                <Bar dataKey="posts" radius={[4, 4, 0, 0]}>
-                  {platformData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            {mounted ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={platformData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} barSize={48}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    cursor={{ fill: '#f3f4f6' }}
+                  />
+                  <Bar dataKey="posts" radius={[4, 4, 0, 0]}>
+                    {platformData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full flex items-center justify-center text-sm text-neutral-400">
+                Loading chart...
+              </div>
+            )}
           </div>
         </div>
       </div>

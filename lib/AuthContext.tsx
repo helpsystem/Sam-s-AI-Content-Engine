@@ -2,12 +2,25 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged, signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "./firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, googleProvider, db } from "./firebase";
 import { Loader2 } from "lucide-react";
+
+export const ADMIN_EMAILS: string[] = [
+  "samdrivingschool.rockville@gmail.com",
+  "helpsystem68@gmail.com",
+];
+
+export function isUserAdmin(email?: string | null): boolean {
+  if (!email) return false;
+  return ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === email.trim().toLowerCase());
+}
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  isAdmin: boolean;
+  role: "admin" | "member";
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -15,6 +28,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  isAdmin: false,
+  role: "member",
   signInWithGoogle: async () => {},
   signOut: async () => {},
 });
@@ -23,10 +38,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const isAdmin = isUserAdmin(user?.email);
+  const role = isAdmin ? "admin" : "member";
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setLoading(false);
+
+      if (currentUser?.uid && currentUser.email) {
+        try {
+          const userDocRef = doc(db, "users", currentUser.uid);
+          const currentIsAdmin = isUserAdmin(currentUser.email);
+          await setDoc(
+            userDocRef,
+            {
+              uid: currentUser.uid,
+              email: currentUser.email,
+              displayName: currentUser.displayName || "",
+              photoURL: currentUser.photoURL || "",
+              role: currentIsAdmin ? "admin" : "member",
+              lastLoginAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } catch (err) {
+          console.warn("Could not sync user profile to Firestore:", err);
+        }
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -48,7 +87,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, role, signInWithGoogle, signOut }}>
       {loading ? (
         <div className="min-h-screen flex items-center justify-center bg-neutral-50 text-neutral-900">
            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />

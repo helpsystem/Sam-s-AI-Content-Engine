@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle2, ChevronRight, ExternalLink, Loader2, Link2, Link2Off } from "lucide-react";

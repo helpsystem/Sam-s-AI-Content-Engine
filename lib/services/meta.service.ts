@@ -1,6 +1,3 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
 const META_GRAPH_URL = "https://graph.facebook.com/v19.0";
 
 export class MetaIntegrationService {

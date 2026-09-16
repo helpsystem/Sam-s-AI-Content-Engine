@@ -1,3 +1,5 @@
+"use client";
+
 import { Heart, MessageCircle, Bookmark, Share2, Music, MoreHorizontal, User } from "lucide-react";
 
 export interface PreviewPaneProps {
