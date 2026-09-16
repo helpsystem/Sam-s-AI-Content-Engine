@@ -180,6 +180,9 @@ function MainDashboard() {
              <Integrations language={language} />
           )}
         </div>
+        <footer className="h-8 shrink-0 border-t border-neutral-200 bg-white px-6 flex items-center justify-end">
+          <span className="text-[10px] font-medium tracking-wide text-neutral-400">v0.2.0 · build 5dcca12</span>
+        </footer>
       </main>
     </div>
   );
