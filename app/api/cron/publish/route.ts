@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "../../../../lib/firebase-admin";
 import { MetaIntegrationService } from "../../../../lib/services/meta.service";
 import { TikTokIntegrationService } from "../../../../lib/services/tiktok.service";
+import { decryptToken, encryptToken } from "../../../../lib/token-crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -32,27 +33,38 @@ export async function POST(request: NextRequest) {
     for (const postDoc of snapshot.docs) {
       const post = postDoc.data() as Record<string, any>;
       const postRef = db.collection("posts").doc(postDoc.id);
+      const claimed = await db.runTransaction(async (transaction) => {
+        const current = await transaction.get(postRef);
+        if (current.data()?.status !== "scheduled") return false;
+        transaction.update(postRef, { status: "processing", processingStartedAt: new Date() });
+        return true;
+      });
+      if (!claimed) continue;
       try {
         const accountKey = post.platform === "instagram" ? "meta" : post.platform;
         const accountDoc = await db.collection("social_accounts").doc(`${post.userId}_${accountKey}`).get();
         const account = accountDoc.data() as Record<string, any> | undefined;
         if (!account?.accessToken) throw new Error(`No connected ${post.platform} account`);
+        const accessToken = decryptToken(account.accessToken);
+        if (!account.accessToken.startsWith("v1:")) {
+          await db.collection("social_accounts").doc(`${post.userId}_${accountKey}`).update({ accessToken: encryptToken(accessToken), updatedAt: new Date() });
+        }
 
         const content = post.content;
         if (post.platform === "facebook") {
-          await MetaIntegrationService.publishToFacebookPage(account.metadata?.pageId || account.providerId, account.accessToken, getText(content, ["parent_targeted_copy", "caption", "text"]), getText(content, ["call_to_action_url", "link"]));
+          await MetaIntegrationService.publishToFacebookPage(account.metadata?.pageId || account.providerId, accessToken, getText(content, ["parent_targeted_copy", "caption", "text"]), getText(content, ["call_to_action_url", "link"]));
         } else if (post.platform === "instagram") {
           const videoUrl = getMediaUrl(post);
           if (!videoUrl) throw new Error("Instagram requires a public HTTPS video URL");
           const instagramId = account.metadata?.instagramBusinessId;
           if (!instagramId) throw new Error("No Instagram Business account is linked to this Meta account");
-          const result = await MetaIntegrationService.publishInstagramReel(instagramId, account.accessToken, videoUrl, getText(content, ["caption", "parent_targeted_copy"]), post.shareToFeed !== false);
-          await MetaIntegrationService.waitForInstagramContainer(instagramId, result.creationId, account.accessToken);
-          await MetaIntegrationService.finalizeInstagramReel(instagramId, result.creationId, account.accessToken);
+          const result = await MetaIntegrationService.publishInstagramReel(instagramId, accessToken, videoUrl, getText(content, ["caption", "parent_targeted_copy"]), post.shareToFeed !== false);
+          await MetaIntegrationService.waitForInstagramContainer(instagramId, result.creationId, accessToken);
+          await MetaIntegrationService.finalizeInstagramReel(instagramId, result.creationId, accessToken);
         } else if (post.platform === "tiktok") {
           const videoUrl = getMediaUrl(post);
           if (!videoUrl) throw new Error("TikTok requires a public HTTPS video URL");
-          await TikTokIntegrationService.directPostVideo(account.accessToken, videoUrl, getText(content, ["caption", "hook_first_3_seconds"]), post.privacyLevel || "SELF_ONLY", Boolean(post.isBrandOrganic), Boolean(post.isAIGC));
+          await TikTokIntegrationService.directPostVideo(accessToken, videoUrl, getText(content, ["caption", "hook_first_3_seconds"]), post.privacyLevel || "SELF_ONLY", Boolean(post.isBrandOrganic), Boolean(post.isAIGC));
         } else {
           throw new Error(`Unsupported platform: ${post.platform}`);
         }

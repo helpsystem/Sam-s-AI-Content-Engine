@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "../../../../lib/firebase-admin";
 import { readOAuthState } from "../../../../lib/oauth-state";
+import { encryptToken } from "../../../../lib/token-crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,9 @@ export async function GET(request: NextRequest) {
   try {
     const code = request.nextUrl.searchParams.get("code");
     if (request.nextUrl.searchParams.get("error") || !code) throw new Error("TikTok authorization was denied");
-    const { uid } = readOAuthState(request.nextUrl.searchParams.get("state"));
+    const state = request.nextUrl.searchParams.get("state");
+    if (!state || request.cookies.get("tiktok_oauth_state")?.value !== state) throw new Error("TikTok OAuth state mismatch");
+    const { uid } = readOAuthState(state);
     const redirectUri = process.env.TIKTOK_REDIRECT_URI || `${request.nextUrl.origin}/api/tiktok/callback`;
     const response = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -23,12 +26,14 @@ export async function GET(request: NextRequest) {
     if (!profileResponse.ok || profile.error) throw new Error(profile.error?.message || "Could not load TikTok profile");
     const profileUser = profile.data?.user;
     await getAdminDb().collection("social_accounts").doc(`${uid}_tiktok`).set({
-      userId: uid, platform: "tiktok", accessToken: data.access_token, refreshToken: data.refresh_token || null,
+      userId: uid, platform: "tiktok", accessToken: encryptToken(data.access_token), refreshToken: data.refresh_token ? encryptToken(data.refresh_token) : null,
       providerId: profileUser?.open_id || "", accountName: profileUser?.display_name || "TikTok account",
       metadata: { avatarUrl: profileUser?.avatar_url || null, expiresIn: data.expires_in || null },
       connectedAt: new Date(), updatedAt: new Date(),
     }, { merge: true });
-    return NextResponse.redirect(new URL("/?tiktok_connected=true", baseUrl));
+    const redirectResponse = NextResponse.redirect(new URL("/?tiktok_connected=true", baseUrl));
+    redirectResponse.cookies.delete("tiktok_oauth_state");
+    return redirectResponse;
   } catch (error: any) {
     const url = new URL("/", baseUrl);
     url.searchParams.set("tiktok_error", error.message || "TikTok connection failed");

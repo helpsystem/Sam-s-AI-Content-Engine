@@ -20,7 +20,9 @@ export async function POST(request: NextRequest) {
     url.searchParams.set("scope", "user.info.basic,video.publish");
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("state", state);
-    return NextResponse.json({ url: url.toString() });
+    const response = NextResponse.json({ url: url.toString() });
+    response.cookies.set("tiktok_oauth_state", state, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 600, path: "/" });
+    return response;
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Unable to start TikTok OAuth" }, { status: 500 });
   }

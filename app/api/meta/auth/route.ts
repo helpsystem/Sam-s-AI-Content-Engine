@@ -19,7 +19,9 @@ export async function POST(request: NextRequest) {
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("state", state);
     url.searchParams.set("scope", "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish");
-    return NextResponse.json({ url: url.toString() });
+    const response = NextResponse.json({ url: url.toString() });
+    response.cookies.set("meta_oauth_state", state, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 600, path: "/" });
+    return response;
   } catch (error: any) {
     return NextResponse.json({ error: error.message || "Unable to start Meta OAuth" }, { status: 500 });
   }

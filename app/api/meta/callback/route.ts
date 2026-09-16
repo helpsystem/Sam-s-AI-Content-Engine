@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "../../../../lib/firebase-admin";
 import { readOAuthState } from "../../../../lib/oauth-state";
+import { encryptToken } from "../../../../lib/token-crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,9 @@ export async function GET(request: NextRequest) {
   try {
     const code = request.nextUrl.searchParams.get("code");
     if (request.nextUrl.searchParams.get("error") || !code) throw new Error("Meta authorization was denied");
-    const { uid } = readOAuthState(request.nextUrl.searchParams.get("state"));
+    const state = request.nextUrl.searchParams.get("state");
+    if (!state || request.cookies.get("meta_oauth_state")?.value !== state) throw new Error("Meta OAuth state mismatch");
+    const { uid } = readOAuthState(state);
     const redirectUri = process.env.META_REDIRECT_URI || `${request.nextUrl.origin}/api/meta/callback`;
     const tokenUrl = new URL("https://graph.facebook.com/v19.0/oauth/access_token");
     tokenUrl.searchParams.set("client_id", process.env.META_CLIENT_ID || "");
@@ -26,12 +29,14 @@ export async function GET(request: NextRequest) {
     const page = pagesData.data?.[0];
     if (!page?.id || !page.access_token) throw new Error("No Facebook Page was found for this Meta account");
     await getAdminDb().collection("social_accounts").doc(`${uid}_meta`).set({
-      userId: uid, platform: "meta", accessToken: page.access_token, providerId: page.id,
+      userId: uid, platform: "meta", accessToken: encryptToken(page.access_token), providerId: page.id,
       accountName: page.name || "Facebook Page",
       metadata: { pageId: page.id, instagramBusinessId: page.instagram_business_account?.id || null },
       connectedAt: new Date(), updatedAt: new Date(),
     }, { merge: true });
-    return NextResponse.redirect(new URL("/?meta_connected=true", baseUrl));
+    const response = NextResponse.redirect(new URL("/?meta_connected=true", baseUrl));
+    response.cookies.delete("meta_oauth_state");
+    return response;
   } catch (error: any) {
     const url = new URL("/", baseUrl);
     url.searchParams.set("meta_error", error.message || "Meta connection failed");
