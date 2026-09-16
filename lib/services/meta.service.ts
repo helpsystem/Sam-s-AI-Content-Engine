@@ -1,6 +1,20 @@
 const META_GRAPH_URL = "https://graph.facebook.com/v19.0";
 
 export class MetaIntegrationService {
+  static async waitForInstagramContainer(igUserId: string, creationId: string, accessToken: string) {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const url = new URL(`${META_GRAPH_URL}/${creationId}`);
+      url.searchParams.set("fields", "status_code,status");
+      url.searchParams.set("access_token", accessToken);
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message);
+      if (data.status_code === "FINISHED") return data;
+      if (["ERROR", "EXPIRED"].includes(data.status_code)) throw new Error(`Instagram container ${data.status_code.toLowerCase()}`);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+    throw new Error("Instagram container processing timed out");
+  }
   /**
    * Publish a text/image post to a Facebook Page
    */

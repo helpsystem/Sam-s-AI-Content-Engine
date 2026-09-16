@@ -1,19 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle2, ChevronRight, ExternalLink, Loader2, Link2, Link2Off } from "lucide-react";
 import { useAuth } from "../../lib/AuthContext";
-import { db } from "../../lib/firebase";
-import { collection, query, where, getDocs, setDoc, doc, serverTimestamp, deleteDoc } from "firebase/firestore";
 
 interface IntegrationsProps {
   language: "en" | "es";
 }
 
 export function Integrations({ language }: IntegrationsProps) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
   const { user } = useAuth();
 
   const [metaConnecting, setMetaConnecting] = useState(false);
@@ -29,16 +24,15 @@ export function Integrations({ language }: IntegrationsProps) {
 
     const fetchAccounts = async () => {
       try {
-        const q = query(collection(db, "social_accounts"), where("userId", "==", user.uid));
-        const snapshot = await getDocs(q);
-        
+        const idToken = await user.getIdToken();
+        const response = await fetch("/api/integrations", { headers: { Authorization: `Bearer ${idToken}` } });
+        if (!response.ok) throw new Error("Could not load integrations");
+        const data = await response.json();
         let hasMeta = false;
         let hasTiktok = false;
-        
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.platform === "meta") hasMeta = true;
-          if (data.platform === "tiktok") hasTiktok = true;
+        data.accounts.forEach((account: { platform: string }) => {
+          if (account.platform === "meta") hasMeta = true;
+          if (account.platform === "tiktok") hasTiktok = true;
         });
 
         setMetaConnected(hasMeta);
@@ -52,45 +46,6 @@ export function Integrations({ language }: IntegrationsProps) {
 
     fetchAccounts();
   }, [user]);
-
-  // Handle successful redirects
-  useEffect(() => {
-    if (!user || loadingAccounts) return;
-
-    const saveConnection = async () => {
-      const isMetaConnectedParams = searchParams?.get("meta_connected") === "true";
-      const isTiktokConnectedParams = searchParams?.get("tiktok_connected") === "true";
-
-      if (isMetaConnectedParams && !metaConnected) {
-        await setDoc(doc(db, "social_accounts", `${user.uid}_meta`), {
-          userId: user.uid,
-          platform: "meta",
-          connectedAt: serverTimestamp(),
-          mockToken: "meta_mock_token_123"
-        });
-        setMetaConnected(true);
-      }
-
-      if (isTiktokConnectedParams && !tiktokConnected) {
-        await setDoc(doc(db, "social_accounts", `${user.uid}_tiktok`), {
-          userId: user.uid,
-          platform: "tiktok",
-          connectedAt: serverTimestamp(),
-          mockToken: "tiktok_mock_token_123"
-        });
-        setTiktokConnected(true);
-      }
-
-      if (isMetaConnectedParams || isTiktokConnectedParams) {
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.delete("meta_connected");
-        newUrl.searchParams.delete("tiktok_connected");
-        window.history.replaceState({}, '', newUrl.toString());
-      }
-    };
-
-    saveConnection();
-  }, [searchParams, user, loadingAccounts, metaConnected, tiktokConnected]);
 
   const t = {
     en: {
@@ -140,11 +95,15 @@ export function Integrations({ language }: IntegrationsProps) {
   const handleConnectMeta = async () => {
     setMetaConnecting(true);
     try {
-      // In a real app, this would redirect to the OAuth URL
-      // For this preview, we'll simulate the redirect to our API route
-      window.location.href = '/api/meta/auth';
-    } catch (error) {
+      if (!user) throw new Error("You must be signed in");
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/meta/auth", { method: "POST", headers: { Authorization: `Bearer ${idToken}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not start Meta connection");
+      window.location.href = data.url;
+    } catch (error: any) {
       console.error(error);
+      window.alert(error.message || "Could not connect Meta");
       setMetaConnecting(false);
     }
   };
@@ -152,10 +111,15 @@ export function Integrations({ language }: IntegrationsProps) {
   const handleConnectTikTok = async () => {
     setTiktokConnecting(true);
     try {
-      // In a real app, this would redirect to the OAuth URL
-      window.location.href = '/api/tiktok/auth';
-    } catch (error) {
+      if (!user) throw new Error("You must be signed in");
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/tiktok/auth", { method: "POST", headers: { Authorization: `Bearer ${idToken}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not start TikTok connection");
+      window.location.href = data.url;
+    } catch (error: any) {
       console.error(error);
+      window.alert(error.message || "Could not connect TikTok");
       setTiktokConnecting(false);
     }
   };
@@ -163,7 +127,8 @@ export function Integrations({ language }: IntegrationsProps) {
   const handleDisconnectMeta = async () => {
     if (!user) return;
     try {
-      await deleteDoc(doc(db, "social_accounts", `${user.uid}_meta`));
+      const idToken = await user.getIdToken();
+      await fetch("/api/integrations?platform=meta", { method: "DELETE", headers: { Authorization: `Bearer ${idToken}` } });
       setMetaConnected(false);
     } catch (e) {
       console.error(e);
@@ -173,7 +138,8 @@ export function Integrations({ language }: IntegrationsProps) {
   const handleDisconnectTikTok = async () => {
     if (!user) return;
     try {
-      await deleteDoc(doc(db, "social_accounts", `${user.uid}_tiktok`));
+      const idToken = await user.getIdToken();
+      await fetch("/api/integrations?platform=tiktok", { method: "DELETE", headers: { Authorization: `Bearer ${idToken}` } });
       setTiktokConnected(false);
     } catch (e) {
       console.error(e);

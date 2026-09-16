@@ -11,6 +11,7 @@ export function PostComposer({ language, initialContent }: { language: "en" | "e
   const [activePlatform, setActivePlatform] = useState<"tiktok" | "instagram" | "facebook" | "youtube">("tiktok");
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
+  const [mediaUrl, setMediaUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const { user } = useAuth();
 
@@ -40,6 +41,7 @@ export function PostComposer({ language, initialContent }: { language: "en" | "e
         userId: user.uid,
         platform: activePlatform,
         content: content,
+        ...(activePlatform === "tiktok" || activePlatform === "instagram" ? { mediaUrl } : {}),
         status: "scheduled",
         scheduledTime: scheduledDateTime,
         createdAt: serverTimestamp()
@@ -93,6 +95,7 @@ export function PostComposer({ language, initialContent }: { language: "en" | "e
               
               {activePlatform === "tiktok" && (
                 <>
+                  <Field label="Public HTTPS Video URL" value={mediaUrl} onChange={setMediaUrl} />
                   <Field label="Video Hook (First 3s)" value={content?.hook_first_3_seconds} />
                   <Field label="Script & Timestamps" value={content?.script_with_timestamps} type="textarea" />
                   <Field label="Caption" value={content?.caption} type="textarea" />
@@ -110,6 +113,7 @@ export function PostComposer({ language, initialContent }: { language: "en" | "e
 
               {activePlatform === "instagram" && (
                 <>
+                  <Field label="Public HTTPS Video URL" value={mediaUrl} onChange={setMediaUrl} />
                   <Field label="Text Overlay" value={content?.hook_text_overlay} />
                   <Field label="Caption" value={content?.caption} type="textarea" />
                   <Field label="ManyChat Keyword" value={content?.manychat_trigger_keyword} />
@@ -183,7 +187,7 @@ export function PostComposer({ language, initialContent }: { language: "en" | "e
   );
 }
 
-function Field({ label, value, type = "text" }: { label: string, value?: string, type?: "text" | "textarea" }) {
+function Field({ label, value, type = "text", onChange }: { label: string, value?: string, type?: "text" | "textarea", onChange?: (value: string) => void }) {
   return (
     <div>
       <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">{label}</label>
@@ -192,6 +196,7 @@ function Field({ label, value, type = "text" }: { label: string, value?: string,
           className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm min-h-[100px] focus:ring-2 focus:ring-neutral-900 focus:outline-none transition-all"
           defaultValue={value || ""}
           placeholder="Content will appear here..."
+          onChange={(event) => onChange?.(event.target.value)}
         />
       ) : (
         <input 
@@ -199,6 +204,7 @@ function Field({ label, value, type = "text" }: { label: string, value?: string,
           className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-neutral-900 focus:outline-none transition-all"
           defaultValue={value || ""}
           placeholder="Content will appear here..."
+          onChange={(event) => onChange?.(event.target.value)}
         />
       )}
     </div>

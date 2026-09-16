@@ -1,22 +1,27 @@
 import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { getAdminAuth } from "../../../../lib/firebase-admin";
+import { createOAuthState } from "../../../../lib/oauth-state";
 
-export async function GET() {
-  const clientKey = process.env.TIKTOK_CLIENT_KEY;
-  
-  // If the user hasn't set up the TikTok Client Key in .env, we simulate the success for preview
-  if (!clientKey || clientKey === "") {
-    return NextResponse.redirect(new URL("/?tiktok_connected=true", process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"));
+export const dynamic = "force-dynamic";
+
+export async function POST(request: NextRequest) {
+  try {
+    const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    if (!token) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    const user = await getAdminAuth().verifyIdToken(token);
+    const clientKey = process.env.TIKTOK_CLIENT_KEY;
+    const redirectUri = process.env.TIKTOK_REDIRECT_URI || `${request.nextUrl.origin}/api/tiktok/callback`;
+    if (!clientKey || !process.env.TIKTOK_CLIENT_SECRET) return NextResponse.json({ error: "TikTok OAuth is not configured" }, { status: 503 });
+    const state = createOAuthState(user.uid);
+    const url = new URL("https://www.tiktok.com/v2/auth/authorize/");
+    url.searchParams.set("client_key", clientKey);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", "user.info.basic,video.publish");
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("state", state);
+    return NextResponse.json({ url: url.toString() });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || "Unable to start TikTok OAuth" }, { status: 500 });
   }
-
-  // Real OAuth flow
-  const redirectUri = process.env.TIKTOK_REDIRECT_URI || "http://localhost:3000/api/tiktok/callback";
-  
-  // Generate a random CSRF state token
-  const state = Math.random().toString(36).substring(7);
-  
-  const scope = encodeURIComponent("video.upload,user.info.basic");
-  
-  const url = `https://www.tiktok.com/v2/auth/authorize/?client_key=${clientKey}&response_type=code&scope=${scope}&redirect_uri=${redirectUri}&state=${state}`;
-  
-  return NextResponse.redirect(url);
 }
