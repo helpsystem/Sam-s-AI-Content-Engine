@@ -5,7 +5,8 @@ import { readOAuthState } from "../../../../lib/oauth-state";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const baseUrl = configuredBaseUrl && !configuredBaseUrl.includes("localhost") ? configuredBaseUrl : request.nextUrl.origin;
   try {
     const code = request.nextUrl.searchParams.get("code");
     if (request.nextUrl.searchParams.get("error") || !code) throw new Error("TikTok authorization was denied");
