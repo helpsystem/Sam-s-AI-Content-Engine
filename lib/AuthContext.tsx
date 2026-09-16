@@ -37,6 +37,7 @@ const AuthContext = createContext<AuthContextType>({
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const isAdmin = isUserAdmin(user?.email);
   const role = isAdmin ? "admin" : "member";
@@ -71,10 +72,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const signInWithGoogle = async () => {
+    setAuthError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error signing in with Google", error);
+      const errorCode = error?.code || "auth/unknown";
+      const errorMessages: Record<string, string> = {
+        "auth/unauthorized-domain": "This website domain is not authorized in Firebase. Add the Vercel domain in Firebase Console > Authentication > Settings > Authorized domains.",
+        "auth/popup-blocked": "The Google sign-in popup was blocked by the browser. Allow popups for this website and try again.",
+        "auth/popup-closed-by-user": "The Google sign-in window was closed before completing login.",
+        "auth/operation-not-allowed": "Google sign-in is not enabled in Firebase Authentication. Enable the Google provider in Firebase Console.",
+        "auth/network-request-failed": "Firebase could not be reached. Check the deployment network and Firebase project status.",
+      };
+      setAuthError(`${errorMessages[errorCode] || "Google sign-in failed. Check the browser console for the Firebase error."} (Code: ${errorCode})`);
     }
   };
 
@@ -109,6 +120,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               </svg>
               Continue with Google
             </button>
+            {authError && (
+              <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-left text-xs leading-relaxed text-red-700">
+                {authError}
+              </p>
+            )}
           </div>
         </div>
       ) : (
