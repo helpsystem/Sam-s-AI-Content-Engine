@@ -51,6 +51,19 @@ export function Integrations({ language }: IntegrationsProps) {
   const [copiedDockerCmd, setCopiedDockerCmd] = useState(false);
   const [showDockerGuide, setShowDockerGuide] = useState(false);
 
+  const readApiResponse = async (response: Response) => {
+    const contentType = response.headers.get("content-type") || "";
+    const body = await response.text();
+    if (!contentType.includes("application/json")) {
+      throw new Error(`API returned ${response.status} ${response.statusText} instead of JSON. Redeploy the latest Vercel commit.`);
+    }
+    try {
+      return JSON.parse(body);
+    } catch {
+      throw new Error(`API returned invalid JSON (HTTP ${response.status}).`);
+    }
+  };
+
   // Load saved Postiz settings from localStorage
   useEffect(() => {
     const savedUrl = localStorage.getItem("postiz_api_url") || "http://localhost:5000";
@@ -64,7 +77,7 @@ export function Integrations({ language }: IntegrationsProps) {
     setPostizStatus("checking");
     try {
       const res = await fetch(`/api/postiz/status?url=${encodeURIComponent(url)}&apiKey=${encodeURIComponent(apiKey)}`);
-      const data = await res.json();
+      const data = await readApiResponse(res);
       if (data.online) {
         setPostizStatus("online");
         setPostizMessage(data.message || "Connected to Postiz Orchestrator");
@@ -104,7 +117,7 @@ export function Integrations({ language }: IntegrationsProps) {
         const idToken = await user.getIdToken();
         const response = await fetch("/api/integrations", { headers: { Authorization: `Bearer ${idToken}` } });
         if (!response.ok) throw new Error("Could not load integrations");
-        const data = await response.json();
+        const data = await readApiResponse(response);
         let hasMeta = false;
         let hasTiktok = false;
         data.accounts.forEach((account: { platform: string }) => {
@@ -207,7 +220,7 @@ export function Integrations({ language }: IntegrationsProps) {
       if (!user) throw new Error("You must be signed in");
       const idToken = await user.getIdToken();
       const response = await fetch("/api/meta/auth", { method: "POST", headers: { Authorization: `Bearer ${idToken}` } });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || "Could not start Meta connection");
       window.location.href = data.url;
     } catch (error: any) {
@@ -223,7 +236,7 @@ export function Integrations({ language }: IntegrationsProps) {
       if (!user) throw new Error("You must be signed in");
       const idToken = await user.getIdToken();
       const response = await fetch("/api/tiktok/auth", { method: "POST", headers: { Authorization: `Bearer ${idToken}` } });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || "Could not start TikTok connection");
       window.location.href = data.url;
     } catch (error: any) {
