@@ -51,22 +51,30 @@ export async function POST(request: NextRequest) {
         }
 
         const content = post.content;
-        if (post.platform === "facebook") {
-          await MetaIntegrationService.publishToFacebookPage(account.metadata?.pageId || account.providerId, accessToken, getText(content, ["parent_targeted_copy", "caption", "text"]), getText(content, ["call_to_action_url", "link"]));
+        const postText = getText(content, ["parent_targeted_copy", "caption", "text", "hook_first_3_seconds"]);
+        const mediaUrl = getMediaUrl(post);
+
+        if (post.publishEngine === "POSTIZ" || post.postizIntegrationId) {
+          const { PostizIntegrationService } = await import("../../../../lib/services/postiz.service");
+          await PostizIntegrationService.schedulePost({
+            content: postText,
+            mediaUrls: mediaUrl ? [mediaUrl] : [],
+            integrationIds: post.postizIntegrationId ? [post.postizIntegrationId] : [],
+          });
+        } else if (post.platform === "facebook") {
+          await MetaIntegrationService.publishToFacebookPage(account.metadata?.pageId || account.providerId, accessToken, postText, getText(content, ["call_to_action_url", "link"]));
         } else if (post.platform === "instagram") {
-          const videoUrl = getMediaUrl(post);
-          if (!videoUrl) throw new Error("Instagram requires a public HTTPS video URL");
+          if (!mediaUrl) throw new Error("Instagram requires a public HTTPS video URL");
           const instagramId = account.metadata?.instagramBusinessId;
           if (!instagramId) throw new Error("No Instagram Business account is linked to this Meta account");
-          const result = await MetaIntegrationService.publishInstagramReel(instagramId, accessToken, videoUrl, getText(content, ["caption", "parent_targeted_copy"]), post.shareToFeed !== false);
+          const result = await MetaIntegrationService.publishInstagramReel(instagramId, accessToken, mediaUrl, postText, post.shareToFeed !== false);
           await MetaIntegrationService.waitForInstagramContainer(instagramId, result.creationId, accessToken);
           await MetaIntegrationService.finalizeInstagramReel(instagramId, result.creationId, accessToken);
         } else if (post.platform === "tiktok") {
-          const videoUrl = getMediaUrl(post);
-          if (!videoUrl) throw new Error("TikTok requires a public HTTPS video URL");
-          await TikTokIntegrationService.directPostVideo(accessToken, videoUrl, getText(content, ["caption", "hook_first_3_seconds"]), post.privacyLevel || "SELF_ONLY", Boolean(post.isBrandOrganic), Boolean(post.isAIGC));
+          if (!mediaUrl) throw new Error("TikTok requires a public HTTPS video URL");
+          await TikTokIntegrationService.directPostVideo(accessToken, mediaUrl, postText, post.privacyLevel || "SELF_ONLY", Boolean(post.isBrandOrganic), Boolean(post.isAIGC));
         } else {
-          throw new Error(`Unsupported platform: ${post.platform}`);
+          throw new Error(`Unsupported direct platform: ${post.platform}. Please use Postiz Orchestrator for this network.`);
         }
 
         await postRef.update({ status: "published", publishedAt: new Date(), error: null });

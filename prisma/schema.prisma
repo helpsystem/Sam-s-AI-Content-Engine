@@ -26,6 +26,13 @@ enum Provider {
   FACEBOOK
   INSTAGRAM
   TIKTOK
+  LINKEDIN
+  TWITTER_X
+  YOUTUBE
+  PINTEREST
+  THREADS
+  REDDIT
+  POSTIZ
 }
 
 enum PostStatus {
@@ -69,7 +76,7 @@ model SocialAccount {
   accessToken    String
   refreshToken   String?
   tokenExpiresAt DateTime?
-  metadata       Json?     // Stores Instagram Business ID, Facebook Page ID, TikTok Creator Info
+  metadata       Json?     // Stores Instagram Business ID, Facebook Page ID, TikTok Creator Info, Postiz Channel metadata
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 }
@@ -91,6 +98,8 @@ model Post {
   platformMeta    PostPlatformMeta?
   mediaAssets     MediaAsset[]
   metrics         AnalyticsMetric[]
+  postizPostId    String?           // External post ID when dispatched via Postiz Orchestrator
+  publishEngine   String?           @default("HYBRID") // "DIRECT" | "POSTIZ" | "HYBRID"
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 }

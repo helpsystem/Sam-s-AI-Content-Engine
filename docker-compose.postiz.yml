@@ -1,0 +1,126 @@
+# ==============================================================================
+# Postiz Production-Grade Docker Orchestration (Hardened & Isolated)
+# For: Sam's AI Content Engine (Social Media Automation)
+# ==============================================================================
+# Security features:
+# - Internal bridge network: Postgres, Redis, and Temporal are NOT exposed to host.
+# - Explicit volume permissions and persistence.
+# - Pinned to official secure releases (v2.22.2+) to prevent historical CVEs.
+# ==============================================================================
+
+version: "3.8"
+
+networks:
+  postiz-internal:
+    driver: bridge
+    internal: false # allows backend to reach external social media APIs (Meta, TikTok, etc.)
+
+volumes:
+  postiz-db-data:
+    driver: local
+  postiz-redis-data:
+    driver: local
+  postiz-uploads:
+    driver: local
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. PostgreSQL Database
+  # ----------------------------------------------------------------------------
+  postiz-postgres:
+    image: postgres:16-alpine
+    container_name: postiz-postgres
+    restart: unless-stopped
+    networks:
+      - postiz-internal
+    environment:
+      POSTGRES_USER: ${POSTIZ_DB_USER:-postiz}
+      POSTGRES_PASSWORD: ${POSTIZ_DB_PASSWORD:-PostizSecurePass123!}
+      POSTGRES_DB: ${POSTIZ_DB_NAME:-postiz_db}
+    volumes:
+      - postiz-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTIZ_DB_USER:-postiz} -d ${POSTIZ_DB_NAME:-postiz_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Do NOT expose ports to host to prevent direct unauthorized access
+
+  # ----------------------------------------------------------------------------
+  # 2. Redis Cache & Job Broker
+  # ----------------------------------------------------------------------------
+  postiz-redis:
+    image: redis:7-alpine
+    container_name: postiz-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning --requirepass ${POSTIZ_REDIS_PASSWORD:-RedisSecurePass123!}
+    networks:
+      - postiz-internal
+    volumes:
+      - postiz-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${POSTIZ_REDIS_PASSWORD:-RedisSecurePass123!}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Do NOT expose ports to host
+
+  # ----------------------------------------------------------------------------
+  # 3. Temporal Workflow Engine (for scheduled posts, retry queues, token refresh)
+  # ----------------------------------------------------------------------------
+  postiz-temporal:
+    image: temporalio/auto-setup:1.24.2
+    container_name: postiz-temporal
+    restart: unless-stopped
+    networks:
+      - postiz-internal
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=${POSTIZ_DB_USER:-postiz}
+      - POSTGRES_PWD=${POSTIZ_DB_PASSWORD:-PostizSecurePass123!}
+      - POSTGRES_SEEDS=postiz-postgres
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+    depends_on:
+      postiz-postgres:
+        condition: service_healthy
+
+  # ----------------------------------------------------------------------------
+  # 4. Postiz Core Backend & Worker (API & Social Media Manager)
+  # ----------------------------------------------------------------------------
+  postiz-app:
+    image: ghcr.io/gitroomhq/postiz-app:v2.22.2
+    container_name: postiz-app
+    restart: unless-stopped
+    networks:
+      - postiz-internal
+    ports:
+      # Exposed locally so Sam's AI Content Engine can reach it via http://localhost:5000
+      - "${POSTIZ_HOST_PORT:-5000}:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - BACKEND_INTERNAL_URL=http://localhost:5000
+      - FRONTEND_URL=${POSTIZ_PUBLIC_URL:-http://localhost:5000}
+      - NEXT_PUBLIC_BACKEND_URL=${POSTIZ_PUBLIC_URL:-http://localhost:5000}
+      - JWT_SECRET=${POSTIZ_JWT_SECRET:-generate_a_super_random_32_character_secret_here}
+      - DATABASE_URL=postgresql://${POSTIZ_DB_USER:-postiz}:${POSTIZ_DB_PASSWORD:-PostizSecurePass123!}@postiz-postgres:5432/${POSTIZ_DB_NAME:-postiz_db}
+      - REDIS_URL=redis://:${POSTIZ_REDIS_PASSWORD:-RedisSecurePass123!}@postiz-redis:6379
+      - TEMPORAL_ADDRESS=postiz-temporal:7233
+      - STORAGE_PROVIDER=local
+      - UPLOAD_DIRECTORY=/uploads
+      - IS_GENERAL=true
+      # Social OAuth Credentials (can also be configured directly via UI)
+      - META_CLIENT_ID=${META_CLIENT_ID:-}
+      - META_CLIENT_SECRET=${META_CLIENT_SECRET:-}
+      - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY:-}
+      - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET:-}
+    volumes:
+      - postiz-uploads:/uploads
+    depends_on:
+      postiz-postgres:
+        condition: service_healthy
+      postiz-redis:
+        condition: service_healthy
+      postiz-temporal:
+        condition: service_started
